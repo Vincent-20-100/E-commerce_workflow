@@ -120,7 +120,7 @@ Visualize: Build an interactive dashboard using Looker Studio or Streamlit
 
 **🏆 Author**
 
-Vincent Lamy - [GitHub](https://github.com/Vincent-20-100) - [LinkedI](https://www.linkedin.com/in/42-v-lamy/)
+Vincent Lamy - [GitHub](https://github.com/Vincent-20-100) - [LinkedIn](https://www.linkedin.com/in/42-v-lamy/)
 
 
 
