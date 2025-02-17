@@ -1,52 +1,67 @@
-import pyarrow
-import requests
+import os
 import pandas as pd
+from yahooquery import Ticker
 from google.cloud import bigquery
 
-# Initialiser le client BigQuery
+# Configuration des variables
+YAHOO_TICKERS = ["AAPL", "TSLA", "GOOGL"]  # Ajoute les actions que tu veux suivre
+BIGQUERY_PROJECT_ID = "quiet-dimension-427207-t0"  # Remplace par ton ID de projet GCP
+BIGQUERY_DATASET = "investor_dashboard"
+BIGQUERY_TABLE = "stock_prices"
+
+# Initialisation du client BigQuery
 client = bigquery.Client()
 
-# Définir les URLs de l'API Fake Store
-PRODUCTS_URL = "https://fakestoreapi.com/products"
-ORDERS_URL = "https://fakestoreapi.com/carts"
+# Fonction pour récupérer les prix des actions via Yahoo Finance
+def fetch_stock_data(tickers):
+    """
+    Récupère les prix des actions et retourne un DataFrame formaté.
+    """
+    ticker_obj = Ticker(tickers)
+    data = ticker_obj.price  # Récupère les données de marché
 
-# Définir le dataset et les tables BigQuery
-DATASET_ID = 'quiet-dimension-427207-t0.ecommerce_workflow'
-TABLE_PRODUCTS = f"{DATASET_ID}.products"
-TABLE_ORDERS = f"{DATASET_ID}.orders"
+    records = []
+    for symbol, info in data.items():
+        records.append({
+            "symbol": symbol,
+            "market_price": info.get("regularMarketPrice"),
+            "market_change": info.get("regularMarketChange"),
+            "market_high": info.get("regularMarketDayHigh"),
+            "market_low": info.get("regularMarketDayLow"),
+            "market_volume": info.get("regularMarketVolume"),
+            "market_time": info.get("regularMarketTime")
+        })
 
-def fetch_data(url):
-    """Récupère les données d'une API et les retourne sous forme de DataFrame"""
-    response = requests.get(url)
-    if response.status_code == 200:
-        return pd.DataFrame(response.json())
-    else:
-        raise Exception(f"Erreur lors de la récupération des données : {response.status_code}")
+    return pd.DataFrame(records)
 
-def upload_to_bigquery(df, table_id):
-    """Charge un DataFrame Pandas dans une table BigQuery"""
-    job = client.load_table_from_dataframe(df, table_id)
-    job.result()  # Attendre la fin du job
-    print(f"Données chargées dans {table_id}")
+# Fonction pour écrire les données dans BigQuery
+def write_to_bigquery(df):
+    """
+    Envoie un DataFrame dans BigQuery.
+    """
+    if df.empty:
+        print("⚠️ No data to upload!")
+        return
 
-def main():
-    print("Récupération des données...")
+    table_id = f"{BIGQUERY_PROJECT_ID}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}"
     
-    # Récupération des produits
-    df_products = fetch_data(PRODUCTS_URL)
-    
-    # Récupération des commandes
-    df_orders = fetch_data(ORDERS_URL)
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+    )
 
-    print("Chargement des données dans BigQuery...")
-    
-    # Upload des produits
-    upload_to_bigquery(df_products, TABLE_PRODUCTS)
-    
-    # Upload des commandes
-    upload_to_bigquery(df_orders, TABLE_ORDERS)
+    try:
+        job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+        job.result()  # Attendre la fin du job
+        print(f"✅ Successfully uploaded {len(df)} rows to {table_id}")
+    except Exception as e:
+        print(f"❌ Error uploading data: {e}")
 
-    print("✅ Données importées avec succès dans BigQuery !")
-
+# Exécution du pipeline
 if __name__ == "__main__":
-    main()
+    print("🚀 Fetching stock data...")
+    stock_df = fetch_stock_data(YAHOO_TICKERS)
+
+    print("🚀 Uploading data to BigQuery...")
+    write_to_bigquery(stock_df)
+
+    print("✅ Done!")
